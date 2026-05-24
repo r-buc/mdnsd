@@ -96,34 +96,27 @@ cache_gc_timer(struct uloop_timeout *timeout)
 	avl_for_each_element_safe(&records, r, avl, p) {
 		if (!cache_is_expired(r->time, r->ttl, r->refresh))
 			continue;
-		/* Records other than A(AAA) are handled as services */
-		if (r->type != TYPE_A && r->type != TYPE_AAAA) {
-			if (cache_is_expired(r->time, r->ttl, 100))
-				cache_record_free(r);
-			continue;
-		}
 		if (r->refresh >= 100) {
 			cache_record_free(r);
 			continue;
 		}
-		r->refresh += 50;
+		r->refresh += 5;
 		dns_send_question(r->iface, (struct sockaddr *)&r->from, r->record, r->type, 0);
 	}
 
 	avl_for_each_element_safe(&services, s, avl, t) {
-		if (!s->host)
-			continue;
 		if (!cache_is_expired(s->time, s->ttl, s->refresh))
 			continue;
 		if (s->refresh >= 100) {
 			cache_service_free(s);
 			continue;
 		}
-		s->refresh += 50;
-		cache_refresh_service(s);
+		s->refresh += 5;
+		if (s->host)
+			cache_refresh_service(s);
 	}
 
-	uloop_timeout_set(timeout, 10000);
+	uloop_timeout_set(timeout, 1000);
 }
 
 int
@@ -132,7 +125,7 @@ cache_init(void)
 	avl_init(&services, avl_strcasecmp, true, NULL);
 
 	cache_gc.cb = cache_gc_timer;
-	uloop_timeout_set(&cache_gc, 10000);
+	uloop_timeout_set(&cache_gc, 1000);
 
 	return 0;
 }
@@ -172,7 +165,7 @@ cache_service(struct interface *iface, char *entry, size_t hlen, int ttl)
 
 	avl_for_each_element_safe(&services, s, avl, t)
 		if (!strcmp(s->entry, entry)) {
-			s->refresh = 50;
+			s->refresh = 80;
 			s->time = monotonic_time();
 			s->ttl = ttl;
 			return s;
@@ -186,7 +179,7 @@ cache_service(struct interface *iface, char *entry, size_t hlen, int ttl)
 	s->time = monotonic_time();
 	s->ttl = ttl;
 	s->iface = iface;
-	s->refresh = 50;
+	s->refresh = 80;
 
 	if (hlen) {
 		s->host = strncpy(host_buf, s->entry, hlen);
@@ -355,10 +348,10 @@ void cache_answer(struct interface *iface, struct sockaddr *from, uint8_t *base,
 		} else {
 			r->ttl = a->ttl;
 			r->time = now;
-			r->refresh = 50;
+			r->refresh = 80;
 			DBG(1, "A -> %s %s ttl:%d\n", dns_type_string(r->type), r->record, r->ttl);
 		}
-		return;
+		goto flush_records;
 	}
 
 	if (!a->ttl)
@@ -380,7 +373,7 @@ void cache_answer(struct interface *iface, struct sockaddr *from, uint8_t *base,
 		memcpy(&r->from, from, sizeof(struct sockaddr_in6));
 	else
 		memcpy(&r->from, from, sizeof(struct sockaddr_in));
-	r->refresh = 50;
+	r->refresh = 80;
 
 	if (tlen)
 		r->txt = memcpy(txt_ptr, rdata_buffer, tlen);
@@ -392,6 +385,20 @@ void cache_answer(struct interface *iface, struct sockaddr *from, uint8_t *base,
 		free(r);
 	else
 		DBG(1, "A -> %s %s ttl:%d\n", dns_type_string(r->type), r->record, r->ttl);
+
+flush_records:
+	if (flush) {
+		struct cache_record *r2, *p2;
+		avl_for_each_element_safe(&records, r2, avl, p2) {
+			if (strcmp(r2->record, name))
+				continue;
+			if (r2->type != a->type)
+				continue;
+			if (memcmp(&r2->from, from, sizeof(struct sockaddr_storage)) == 0)
+				continue;
+			cache_record_free(r2);
+		}
+	}
 }
 
 void
