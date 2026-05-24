@@ -350,7 +350,6 @@ void cache_answer(struct interface *iface, struct sockaddr *from, uint8_t *base,
 	if (r) {
 		if (!a->ttl) {
 			DBG(1, "D -> %s %s ttl:%d\n", dns_type_string(r->type), r->record, r->ttl);
-			r->time = now + 1 - r->ttl;
 			r->refresh = 100;
 		} else {
 			r->ttl = a->ttl;
