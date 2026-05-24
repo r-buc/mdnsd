@@ -69,7 +69,7 @@ cache_service_free(struct cache_service *s)
 static int
 cache_is_expired(time_t t, uint32_t ttl, int frac)
 {
-	if (monotonic_time() - t >= ttl * frac / 100)
+	if (monotonic_time() - t >= (uint64_t)ttl * frac / 100)
 		return 1;
 
 	return 0;
