@@ -76,15 +76,21 @@ cache_is_expired(time_t t, uint32_t ttl, int frac)
 }
 
 static void
+cache_refresh_record(struct cache_record *r)
+{
+	dns_send_question(r->iface, NULL, r->record, r->type, 1);
+}
+
+static void
 cache_refresh_service(struct cache_service *s)
 {
-	dns_query(s->entry, TYPE_PTR);
+	dns_send_question(s->iface, NULL, s->entry, TYPE_PTR, 1);
 
 	if (!s->host)
 		return;
 
-	dns_query(s->host, TYPE_A);
-	dns_query(s->host, TYPE_AAAA);
+	dns_send_question(s->iface, NULL, s->host, TYPE_A, 1);
+	dns_send_question(s->iface, NULL, s->host, TYPE_AAAA, 1);
 }
 
 static void
@@ -106,8 +112,8 @@ cache_gc_timer(struct uloop_timeout *timeout)
 			cache_record_free(r);
 			continue;
 		}
-		r->refresh += 50;
-		dns_send_question(r->iface, (struct sockaddr *)&r->from, r->record, r->type, 0);
+		r->refresh = 100;
+		cache_refresh_record(r);
 	}
 
 	avl_for_each_element_safe(&services, s, avl, t) {
@@ -119,7 +125,7 @@ cache_gc_timer(struct uloop_timeout *timeout)
 			cache_service_free(s);
 			continue;
 		}
-		s->refresh += 50;
+		s->refresh = 100;
 		cache_refresh_service(s);
 	}
 
@@ -172,7 +178,7 @@ cache_service(struct interface *iface, char *entry, size_t hlen, int ttl)
 
 	avl_for_each_element_safe(&services, s, avl, t)
 		if (!strcmp(s->entry, entry)) {
-			s->refresh = 50;
+			s->refresh = 80;
 			s->time = monotonic_time();
 			s->ttl = ttl;
 			return s;
@@ -186,7 +192,7 @@ cache_service(struct interface *iface, char *entry, size_t hlen, int ttl)
 	s->time = monotonic_time();
 	s->ttl = ttl;
 	s->iface = iface;
-	s->refresh = 50;
+	s->refresh = 80;
 
 	if (hlen) {
 		s->host = strncpy(host_buf, s->entry, hlen);
@@ -355,7 +361,7 @@ void cache_answer(struct interface *iface, struct sockaddr *from, uint8_t *base,
 		} else {
 			r->ttl = a->ttl;
 			r->time = now;
-			r->refresh = 50;
+			r->refresh = 80;
 			DBG(1, "A -> %s %s ttl:%d\n", dns_type_string(r->type), r->record, r->ttl);
 		}
 		return;
@@ -380,7 +386,7 @@ void cache_answer(struct interface *iface, struct sockaddr *from, uint8_t *base,
 		memcpy(&r->from, from, sizeof(struct sockaddr_in6));
 	else
 		memcpy(&r->from, from, sizeof(struct sockaddr_in));
-	r->refresh = 50;
+	r->refresh = 80;
 
 	if (tlen)
 		r->txt = memcpy(txt_ptr, rdata_buffer, tlen);
