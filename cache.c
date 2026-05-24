@@ -261,10 +261,6 @@ void cache_answer(struct interface *iface, struct sockaddr *from, uint8_t *base,
 	int host_len = 0;
 	static char *rdata_buffer = (char *) mdns_buf;
 	time_t now = monotonic_time();
-	size_t from_len = sizeof(struct sockaddr_in);
-
-	if (from && from->sa_family == AF_INET6)
-		from_len = sizeof(struct sockaddr_in6);
 
 	nlen = strlen(name);
 
@@ -391,12 +387,19 @@ void cache_answer(struct interface *iface, struct sockaddr *from, uint8_t *base,
 		DBG(1, "A -> %s %s ttl:%d\n", dns_type_string(r->type), r->record, r->ttl);
 
 flush_records:
-	if (flush) {
+	if (flush && from) {
 		struct cache_record *r2, *p2;
+		size_t from_len = sizeof(struct sockaddr_in);
+
+		if (from->sa_family == AF_INET6)
+			from_len = sizeof(struct sockaddr_in6);
+
 		avl_for_each_element_safe(&records, r2, avl, p2) {
 			if (strcmp(r2->record, name))
 				continue;
 			if (r2->type != a->type)
+				continue;
+			if (r2->from.ss_family != from->sa_family)
 				continue;
 			if (memcmp(&r2->from, from, from_len) == 0)
 				continue;
