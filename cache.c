@@ -261,6 +261,10 @@ void cache_answer(struct interface *iface, struct sockaddr *from, uint8_t *base,
 	int host_len = 0;
 	static char *rdata_buffer = (char *) mdns_buf;
 	time_t now = monotonic_time();
+	size_t from_len = sizeof(struct sockaddr_in);
+
+	if (from && from->sa_family == AF_INET6)
+		from_len = sizeof(struct sockaddr_in6);
 
 	nlen = strlen(name);
 
@@ -394,7 +398,7 @@ flush_records:
 				continue;
 			if (r2->type != a->type)
 				continue;
-			if (memcmp(&r2->from, from, sizeof(struct sockaddr_storage)) == 0)
+			if (memcmp(&r2->from, from, from_len) == 0)
 				continue;
 			cache_record_free(r2);
 		}
