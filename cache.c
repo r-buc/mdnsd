@@ -81,21 +81,6 @@ cache_refresh_record(struct cache_record *r)
 	dns_send_question(r->iface, NULL, r->record, r->type, 1);
 }
 
-static int
-cache_next_refresh(int refresh)
-{
-	if (refresh < 80)
-		return 80;
-	if (refresh < 85)
-		return 85;
-	if (refresh < 90)
-		return 90;
-	if (refresh < 95)
-		return 95;
-
-	return 100;
-}
-
 static void
 cache_refresh_service(struct cache_service *s)
 {
@@ -127,7 +112,7 @@ cache_gc_timer(struct uloop_timeout *timeout)
 			cache_record_free(r);
 			continue;
 		}
-		r->refresh = cache_next_refresh(r->refresh);
+		r->refresh = 100;
 		cache_refresh_record(r);
 	}
 
@@ -140,7 +125,7 @@ cache_gc_timer(struct uloop_timeout *timeout)
 			cache_service_free(s);
 			continue;
 		}
-		s->refresh = cache_next_refresh(s->refresh);
+		s->refresh = 100;
 		cache_refresh_service(s);
 	}
 
